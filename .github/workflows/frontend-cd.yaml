@@ -12,7 +12,7 @@ env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: frontend
   EKS_CLUSTER_NAME: cluster
-  REACT_APP_MOVIE_API_URL: http://a7e60dcf540fd44bd95baef3272cde76-2139601130.us-east-1.elb.amazonaws.com
+  REACT_APP_MOVIE_API_URL: http://ac644ca0351584b3784ec7c5f7e41a4b-1288754603.us-east-1.elb.amazonaws.com
 
 jobs:
   lint:
