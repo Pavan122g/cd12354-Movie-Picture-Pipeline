@@ -1,4 +1,4 @@
-name: Frontend CD
+name: Frontend Continous Deployment
 
 on:
   push:
@@ -12,7 +12,7 @@ env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: frontend
   EKS_CLUSTER_NAME: cluster
-  REACT_APP_MOVIE_API_URL: http://localhost:5000
+  REACT_APP_MOVIE_API_URL: http://abb756065e3c44959af6775d0d8eac40-468922809.us-east-1.elb.amazonaws.com
 
 jobs:
   lint:
@@ -25,10 +25,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "18.14"
+          node-version-file: starter/frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: starter/frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -46,10 +48,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "18.14"
+          node-version-file: starter/frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: starter/frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -62,8 +66,6 @@ jobs:
     needs:
       - lint
       - test
-    outputs:
-      image: ${{ steps.image.outputs.image }}
 
     steps:
       - name: Checkout code
@@ -74,29 +76,25 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push Docker image
+      - name: Build Docker image
         working-directory: starter/frontend
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build \
-            --build-arg REACT_APP_MOVIE_API_URL=${{ env.REACT_APP_MOVIE_API_URL }} \
-            --tag "$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG" \
+            --build-arg=REACT_APP_MOVIE_API_URL=${{ env.REACT_APP_MOVIE_API_URL }} \
+            --tag=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
             .
-          docker push "$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG"
 
-      - name: Export image reference
-        id: image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: echo "image=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+      - name: Push Docker image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
   deploy:
     runs-on: ubuntu-latest
@@ -111,18 +109,18 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Configure kubectl
-        run: aws eks update-kubeconfig --name "${{ env.EKS_CLUSTER_NAME }}" --region "${{ env.AWS_REGION }}"
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
 
       - name: Install Kustomize
         uses: imranismail/setup-kustomize@v2
 
       - name: Deploy frontend
         working-directory: starter/frontend/k8s
-        env:
-          IMAGE: ${{ needs.build.outputs.image }}
         run: |
-          kustomize edit set image "frontend=$IMAGE"
+          kustomize edit set image frontend=780594067794.dkr.ecr.us-east-1.amazonaws.com/frontend:${{ github.sha }}
           kustomize build | kubectl apply -f -
