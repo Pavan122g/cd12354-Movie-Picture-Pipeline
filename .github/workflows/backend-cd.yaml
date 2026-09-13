@@ -135,7 +135,7 @@ jobs:
           kustomize build . | kubectl apply -f -
       - name: Verify deployment
         run: |
-          if ! kubectl rollout status deployment/backend --timeout=0s; then
+          if ! kubectl rollout status deployment/backend --timeout=120s; then
             kubectl get pods -l app=backend -o wide
             kubectl describe deployment backend
             kubectl describe pods -l app=backend
